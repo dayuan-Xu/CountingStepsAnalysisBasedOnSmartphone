@@ -22,7 +22,20 @@ android {
         vectorDrawables.useSupportLibrary = true
     }
 
+    signingConfigs {
+        getByName("debug") {
+            storeFile = file("debug.keystore") // 使用模块目录下的 debug.keystore
+            storePassword = "android"
+            keyAlias = "Android Debug Key"
+            keyPassword = "android"
+        }
+    }
+
+
     buildTypes {
+        debug {
+            signingConfig = signingConfigs.getByName("debug")
+        }
         release {
             isMinifyEnabled = true
             proguardFiles(getDefaultProguardFile("proguard-android.txt"), "proguard-rules.pro")
