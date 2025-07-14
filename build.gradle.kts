@@ -26,7 +26,7 @@ android {
         getByName("debug") {
             storeFile = file("debug.keystore") // 使用模块目录下的 debug.keystore
             storePassword = "android"
-            keyAlias = "Android Debug Key"
+            keyAlias = "androiddebugkey"
             keyPassword = "android"
         }
     }

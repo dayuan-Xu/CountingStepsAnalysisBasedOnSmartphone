@@ -20,8 +20,6 @@ import com.baidu.location.LocationClient;
 import com.baidu.location.LocationClientOption;
 import com.baidu.mapapi.model.LatLng;
 import com.baidu.mapapi.utils.DistanceUtil;
-import com.example.finalapp.room.AppDatabase;
-import com.example.finalapp.room.Record;
 
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
@@ -50,13 +48,13 @@ public class MyLocationService extends Service {
     private long trackingStartTimeMillis;
     private long trackingEndTimeMills;
     private boolean isTracking = false;
-    private final List<LatLng> mTrajectoryPoints = new ArrayList<>();
+    private final ArrayList<LatLng> mTrajectoryPoints = new ArrayList<>();// 轨迹点列表
     private double totalDistance = 0.0;
 
     // 绑定接口
     private final IBinder binder = new LocalBinder();
 
-    public long lastLocationTime = 0;// 值为-1表示定位开启后还没有收到第一个位置信息
+    public long lastLocationTime = 0;// 值为-1表示定位开启后还没有收到第一个坐标
     // 保存界面对象
     private MainActivity callback;
     private int locationAttempts;
@@ -109,9 +107,21 @@ public class MyLocationService extends Service {
             locationClientStartedTime = System.currentTimeMillis();
             Log.d(TAG, "定位服务已恢复");
             if (callback != null) {
-                mainHandler.post(() -> callback.updateLogDisplay("已重启定位，正在等待第一个位置信息..."));
+                mainHandler.post(() -> callback.updateLocationLog("已重启定位，正在等待第一个坐标..."));
             }
         }
+    }
+
+    public long geTrackingPeriod() {
+        return trackingEndTimeMills - trackingStartTimeMillis;
+    }
+
+    public long getTrackingStartTimeMillis() {
+        return trackingStartTimeMillis;
+    }
+
+    public long geTrackingEndTimeMills() {
+        return trackingEndTimeMills;
     }
 
 
@@ -190,16 +200,33 @@ public class MyLocationService extends Service {
         // 所有需要使用Handler往主线程负责处理的消息队列中添加UI更新任务
         @Override
         public void onReceiveLocation(BDLocation location) {
-            // 检查位置信息是否有效
+            // 检查坐标是否有效
             if (location == null) return;
 
-            if (location.getLocType() == BDLocation.TypeGpsLocation) {
+            if (location.getLocType() != BDLocation.TypeServerError) {
+                String type = "";
+                switch (location.getLocType()) {
+                    case 61:
+                        type = "卫星定位";
+                        break;
+                    case BDLocation.TypeNetWorkLocation:
+                        type = "网络定位";
+                        break;
+                    case BDLocation.TypeOffLineLocation:
+                        type = "离线定位";
+                    default:
+                        break;
+                }
+                if (location.getFloor() != null) {
+                    // 当前支持高精度室内定位
+                    mLocationClient.startIndoorMode();// 开启室内定位模式（重复调用也没问题），开启后，定位SDK会融合各种定位信息（Gnss,WI-FI，蓝牙，传感器等）连续平滑的输出定位结果；
+                }
                 String timestamp = new SimpleDateFormat("HH:mm:ss", Locale.CHINA).format(new Date());
 
                 if (lastLocationTime == -1) {
-                    Log.d(TAG, timestamp + "-本次开启定位后第一次收到GPS定位");
+                    Log.d(TAG, "😀😀😀 本次开启定位后第一次收到定位信息，本次定位结果类型为" + type);
                 } else {
-                    Log.d(TAG, "😀😀😀 Received new location！本次定位结果类型为" + location.getLocType());
+                    Log.d(TAG, "😀😀😀 收到新的定位信息！本次定位结果类型为" + type);
                 }
 
                 // 更新上次收到新位置的时间
@@ -211,10 +238,11 @@ public class MyLocationService extends Service {
 
                 // 切换到主线程（在主线程中处理UI更新消息）
                 if (callback != null) {
+                    String finalType = type;
                     mainHandler.post(() -> {
                         // 更新UI: 显示日志，在地图上显示最新位置点
                         callback.updateLocationOnMap(currentPoint, speed, accuracy);
-                        callback.updateLogDisplay(timestamp + "-收到GPS定位，" + location.getLocTypeDescription());
+                        callback.updateLocationLog(timestamp + "-收到新定位，类型:" + finalType);
                     });
                 }
 
@@ -224,9 +252,10 @@ public class MyLocationService extends Service {
                 // 如果正在追踪轨迹
                 if (isTracking) {
                     if (callback != null) {
-                        callback.updateSpeedDisplay(speed);
+                        mainHandler.post(() -> {
+                            callback.updateSpeedDisplay(speed);
+                        });
                     }
-
                     // 先尝试找到最精确的轨迹起点
                     if (mTrajectoryPoints.isEmpty()) {
                         LatLng startPoint = getMostAccuracyLocation(location);
@@ -246,7 +275,7 @@ public class MyLocationService extends Service {
                             locationAttempts++;
                             // 检查是否超时
                             if (locationAttempts >= MAX_WAIT_TIMES) {
-                                // 使用最新位置信息作为起点
+                                // 使用最新坐标作为起点
                                 mTrajectoryPoints.add(currentPoint);
                                 if (callback != null) {
                                     // 切换到主线程（在主线程中处理UI更新消息）
@@ -285,9 +314,7 @@ public class MyLocationService extends Service {
                 }
             } else {
                 // 检查定位结果是否有效
-                if (location.getLocType() == BDLocation.TypeServerError) {
-                    Log.e(TAG, "百度地图的定位服务异常");
-                }
+                Log.e(TAG, "百度地图的定位服务异常");
             }
         }
 
@@ -339,7 +366,7 @@ public class MyLocationService extends Service {
 
         // 显示日志
         if (callback != null) {
-            mainHandler.post(() -> callback.updateLogDisplay("已开启定位，正在等待第一个位置信息..."));
+            mainHandler.post(() -> callback.updateLocationLog("已开启定位，正在等待第一个坐标..."));
         }
 
     }
@@ -347,7 +374,7 @@ public class MyLocationService extends Service {
     @NonNull
     private static LocationClientOption getLocationClientOption() {
         LocationClientOption option = new LocationClientOption();
-        option.setLocationMode(LocationClientOption.LocationMode.Device_Sensors);
+        option.setLocationMode(LocationClientOption.LocationMode.Hight_Accuracy);
         option.setCoorType("bd09ll");// 设置坐标类型
         option.setScanSpan(1000);// 设置定位间隔，单位毫秒
         option.setOpenGnss(true);// 高精度定位和仅仅使用设备时必须打开
@@ -430,7 +457,7 @@ public class MyLocationService extends Service {
     private void updateTimeLength() {
         long currentTime = System.currentTimeMillis();
         long duration = currentTime - trackingStartTimeMillis;
-        String formattedDuration = formatDuration(duration);
+        String formattedDuration = MyUtil.formatDuration(duration);
 
         // 直接调用MainActivity的更新方法
         if (callback != null) {
@@ -442,49 +469,17 @@ public class MyLocationService extends Service {
         if (isTracking) {
             isTracking = false;
             trackingEndTimeMills = System.currentTimeMillis();
+            mLocationClient.stopIndoorMode();
             // 停止时长更新任务
             if (durationUpdateTask != null) {
                 mainHandler.removeCallbacks(durationUpdateTask);
                 durationUpdateTask = null;
             }
-            saveRecord();
         }
     }
 
-    // 添加格式化方法
-    private String formatDuration(long millis) {
-        long seconds = millis / 1000;
-        long hours = seconds / 3600;
-        long minutes = (seconds % 3600) / 60;
-        long secs = seconds % 60;
-
-        if (hours > 0) {
-            return String.format(Locale.getDefault(), "%02d:%02d:%02d", hours, minutes, secs);
-        } else {
-            return String.format(Locale.getDefault(), "%02d:%02d", minutes, secs);
-        }
-    }
 
     // 保存本次运动记录: 总距离，时间，轨迹
-    private void saveRecord() {
-        // 创建记录对象
-        Record record = new Record();
-        record.distance = totalDistance;
-        record.duration = formatDuration(trackingEndTimeMills - trackingStartTimeMillis);
-        record.startTime = new Date(trackingStartTimeMillis);
-        record.endTime = new Date(trackingEndTimeMills);
-        record.points = new ArrayList<>(mTrajectoryPoints); // 复制轨迹点
-        record.steps = callback.myStepService.getCurrentSteps();
-        record.walking_steps = callback.myStepService.getWalkingSteps();
-        record.running_steps = callback.myStepService.getRunningSteps();
-
-        // 保存到数据库
-        new Thread(() -> {
-            AppDatabase db = MyApp.getDatabase();
-            db.recordDao().insert(record);
-            Log.d(TAG, "轨迹跟踪记录已保存，ID: " + record.id);
-        }).start();
-    }
 
     /**
      * 首次定位很重要，选一个精度相对较高的起始点
@@ -494,7 +489,7 @@ public class MyLocationService extends Service {
      */
     private LatLng getMostAccuracyLocation(final BDLocation location) {
         if (location.getRadius() > 25) {
-            //最新点的的gps位置精度大于25米，直接弃用，
+            //最新坐标的精度大于25米，直接弃用，
             return null;
         }
 

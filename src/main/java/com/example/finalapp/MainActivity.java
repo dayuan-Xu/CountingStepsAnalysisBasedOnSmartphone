@@ -8,6 +8,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.ServiceConnection;
 import android.content.pm.PackageManager;
+import android.location.LocationManager;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.IBinder;
@@ -38,8 +39,11 @@ import com.baidu.mapapi.map.OverlayOptions;
 import com.baidu.mapapi.map.Polyline;
 import com.baidu.mapapi.map.PolylineOptions;
 import com.baidu.mapapi.model.LatLng;
+import com.example.finalapp.room.AppDatabase;
+import com.example.finalapp.room.Record;
 
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.List;
 import java.util.Locale;
 
@@ -63,7 +67,8 @@ public class MainActivity extends AppCompatActivity {
 
     private ValueAnimator longPressProgressAnimator;
 
-    private TextView tvLog, tvDistance, tvTime, tvSteps, tvSpeed;
+    // 数据相关UI
+    private TextView tvDistance, tvTime, tvSteps, tvSpeed, tvLocationLog;
 
     private Polyline mTrajectoryLine;// 轨迹线
     private Marker mStartMarker; // 轨迹起点的点标记
@@ -135,6 +140,7 @@ public class MainActivity extends AppCompatActivity {
             myStepService = null;
         }
     };
+    LocationManager locationManager;
 
 
     @Override
@@ -231,7 +237,7 @@ public class MainActivity extends AppCompatActivity {
     // 2 初始化UI
     @SuppressLint("ClickableViewAccessibility")
     private void initUI() {
-        tvLog = findViewById(R.id.tvLogOutput);
+        tvLocationLog = findViewById(R.id.tvLocationLog);
         tvDistance = findViewById(R.id.tvDistance);
         tvTime = findViewById(R.id.tvTime);
         tvSteps = findViewById(R.id.tvSteps);
@@ -320,67 +326,45 @@ public class MainActivity extends AppCompatActivity {
 
     // 2 启停控制
     private void handleStart() {
-        // 清理地图上的所有上层覆盖
+        // 1 更新UI
         clearMap();
         tvDistance.setText("距离: 0.0");
         tvSteps.setText("0");
         btnStartOrStop.setImageResource(R.drawable.ic_btn_stop);
         btnStartOrStop.setContentDescription("长按停止");
 
-        // 启动定位服务的轨迹跟踪功能
+        // 2 启动持续轨迹跟踪和速度实时识别
         startTracking();
 
-        // 启动计步服务并开始计步
+        // 3 启动持续计步
         Intent stepServiceIntent = new Intent(this, MyCountingStepsService.class);
         startForegroundService(stepServiceIntent);
 
-        // 绑定计步服务（建立通信渠道)
+        // 4 绑定计步服务（建立通信渠道)
         bindService(stepServiceIntent, stepConnection, Context.BIND_AUTO_CREATE);
     }
 
     private void handleStop() {
+        // 1 更新UI
         btnStartOrStop.setImageResource(R.drawable.ic_btn_start);
         btnStartOrStop.setContentDescription("单击开始");
 
-        // 停止轨迹跟踪功能
+        // 2 停止持续轨迹跟踪和速度实时识别
         stopTracking();
-        // 停止计步功能
+
+        // 3 停止持续计步
         stopCounting();
 
-        // 解绑、停止计步服务
+        // 5 保存记录，此时还不能解绑计步服务，因为要获取其中状态数据
+        saveRecord();
+
+        // 6 解绑、停止计步服务
         Intent stepServiceIntent = new Intent(this, MyCountingStepsService.class);
         if (isStepBound) {
             unbindService(stepConnection);
             isStepBound = false;
         }
-        stopService(stepServiceIntent); // 停止服务
-    }
-
-    private void startTracking() {
-        if (isLocationBound) {
-            // 启动轨迹追踪
-            myLocationService.startTracking();
-            Log.d(TAG, "已经启动轨迹跟踪");
-        } else {
-            Toast.makeText(this, "定位服务未绑定！", Toast.LENGTH_SHORT).show();
-        }
-    }
-
-    public void stopTracking() {
-        if (isLocationBound) {
-            updateDistanceDisplay();
-            // 至少有两个轨迹点时，才添加终点标记
-            List<LatLng> points = myLocationService.getTrajectoryPoints();
-            if (points.size() >= 2) {
-                LatLng endPoint = points.get(points.size() - 1);
-                addEndMarker(endPoint);
-            }
-            // 停止轨迹追踪，但是不停止整个定位服务（因为用户还可能实时显示，只有在不处于跟踪状态下退出应用，才停止我的定位服务）
-            myLocationService.stopTracking();
-            Log.d(TAG, "已经关闭轨迹跟踪");
-        } else {
-            Toast.makeText(this, "定位服务未绑定！", Toast.LENGTH_SHORT).show();
-        }
+        stopService(stepServiceIntent);
     }
 
     private void startCircularProgressAnimation() {
@@ -401,7 +385,6 @@ public class MainActivity extends AppCompatActivity {
         longPressProgressAnimator.start();
     }
 
-
     private void resetCircularProgress() {
         if (longPressProgressAnimator != null && longPressProgressAnimator.isRunning()) {
             longPressProgressAnimator.removeAllUpdateListeners();
@@ -412,7 +395,35 @@ public class MainActivity extends AppCompatActivity {
         circularProgress.setVisibility(View.GONE);
     }
 
+    // 启动轨迹追踪
+    private void startTracking() {
+        if (isLocationBound) {
+            myLocationService.startTracking();
+            Log.d(TAG, "已经启动轨迹跟踪");
+        } else {
+            Toast.makeText(this, "定位服务未绑定！", Toast.LENGTH_SHORT).show();
+        }
+    }
 
+    // 停止持续轨迹跟踪和速度实时识别
+    public void stopTracking() {
+        if (isLocationBound) {
+            updateDistanceDisplay();
+            // 至少有两个轨迹点时，才添加终点标记
+            List<LatLng> points = myLocationService.getTrajectoryPoints();
+            if (points.size() >= 2) {
+                LatLng endPoint = points.get(points.size() - 1);
+                addEndMarker(endPoint);
+            }
+            // 停止轨迹追踪，但是不停止整个定位服务（因为用户还可能实时显示，只有在不处于跟踪状态下退出应用，才停止我的定位服务）
+            myLocationService.stopTracking();
+            Log.d(TAG, "已经关闭轨迹跟踪和速度实时识别");
+        } else {
+            Toast.makeText(this, "定位服务未绑定！", Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    // 停止持续计步
     private void stopCounting() {
         Log.d(TAG, "stopCounting开始执行");
         if (isStepBound) {
@@ -421,14 +432,42 @@ public class MainActivity extends AppCompatActivity {
         Log.d(TAG, "stopCounting执行完毕");
     }
 
+    // 保存本次运动记录: 总距离，时间，轨迹
+    private void saveRecord() {
+        if (myLocationService != null && myStepService != null) {
+            // 创建记录对象
+            Record record = new Record();
+            record.distance = myLocationService.getTotalDistance();
+            record.duration = MyUtil.formatDuration(myLocationService.geTrackingPeriod());
+            record.startTime = new Date(myLocationService.getTrackingStartTimeMillis());
+            record.endTime = new Date(myLocationService.geTrackingEndTimeMills());
+            record.points = new ArrayList<>(myLocationService.getTrajectoryPoints()); // 复制轨迹点
+            record.steps = myStepService.getCurrentSteps();
+            record.walking_steps = myStepService.getWalkingSteps();
+            record.running_steps = myStepService.getRunningSteps();
+            record.statusPeriods = myStepService.getStatusPeriods();
 
-    // 众多UI更新操作
+            // 保存到数据库
+            new Thread(() -> {
+                AppDatabase db = MyApp.getDatabase();
+                db.recordDao().insert(record);
+                Log.d(TAG, "轨迹跟踪记录已保存，ID: " + record.id);
+            }).start();
+        }
 
-    // 显示GPS接收日志
-    public void updateLogDisplay(String logMessage) {
-        tvLog.setText(logMessage);
     }
 
+    // 下面是UI更新操作，供服务回调。
+
+    // 更新速度显示
+    public void updateSpeedDisplay(float speed) {
+        tvSpeed.setText(String.format("%.1f", speed / 3.6F));
+    }
+
+    // 显示GPS接收日志
+    public void updateLocationLog(String logMessage) {
+        tvLocationLog.setText(logMessage);
+    }
 
     // 更新地图上的当前坐标
     public void updateLocationOnMap(LatLng point, float speed, float accuracy) {
@@ -444,7 +483,6 @@ public class MainActivity extends AppCompatActivity {
         // 以指定点为地图中心
         moveMapToCenterOf(point);
     }
-
 
     // 以指定点为地图中心
     private void moveMapToCenterOf(LatLng ll) {
@@ -465,7 +503,6 @@ public class MainActivity extends AppCompatActivity {
             }
         });
     }
-
 
     // 显示轨迹起点获取进度
     public void updateLocationProgress() {
@@ -520,14 +557,6 @@ public class MainActivity extends AppCompatActivity {
     public void updateStepsDisplay() {
         if (isStepBound) {
             tvSteps.setText(String.format(Locale.getDefault(), "%d", myStepService.getCurrentSteps()));
-        }
-    }
-
-    // 显示速度
-    public void updateSpeedDisplay(float speed) {
-        if (isLocationBound) {
-            // 定位结果中的速度单位是 km/h，需要转换为 m/s
-            tvSpeed.setText(String.format(Locale.getDefault(), "%.1f", speed / 3.6F));
         }
     }
 
@@ -595,8 +624,7 @@ public class MainActivity extends AppCompatActivity {
         mEndMarker = (Marker) mBaiduMap.addOverlay(endOptions);
     }
 
-
-    // 加载菜单
+    // 加载主界面的菜单
     @Override
     public boolean onCreateOptionsMenu(Menu menu) {
         getMenuInflater().inflate(R.menu.main_menu, menu);
@@ -622,6 +650,14 @@ public class MainActivity extends AppCompatActivity {
         if (mMapView != null) {
             mMapView.onResume();
         }
+        // 绑定成功->pause->resume，则恢复回调
+        if (myLocationService != null) {
+            myLocationService.setCallback(this);
+        }
+        if (myStepService != null) {
+            myStepService.setCallback(this);
+        }
+
         if (myLocationService != null) {
             if (myLocationService.isTracking()) {
                 // 如果处于轨迹跟踪中，则切回到本界面时更新地图轨迹
@@ -640,11 +676,18 @@ public class MainActivity extends AppCompatActivity {
         if (mMapView != null) {
             mMapView.onPause();
         }
+
         if (myLocationService != null) {
+            // 清除回调
+            myLocationService.clearCallback();
             // 如果该界面失去焦点并且不处于轨迹跟踪中时，暂停位置更新
             if (myLocationService.isTracking() == false) {
                 myLocationService.pauseLocationUpdates();
             }
+        }
+        if (myStepService != null) {
+            // 清除回调
+            myStepService.clearCallback();
         }
         Log.d(TAG, "MainActivity onPause执行完毕");
     }
@@ -715,5 +758,4 @@ public class MainActivity extends AppCompatActivity {
             Log.d(TAG, "当前没有处于轨迹跟踪状态，则杀死定位服务");
         }
     }
-
 }

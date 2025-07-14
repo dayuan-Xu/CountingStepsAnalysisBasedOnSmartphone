@@ -31,20 +31,18 @@ public class RecordAdapter extends ArrayAdapter<Record> {
 
         Record record = getItem(position);
 
-        TextView textView = convertView.findViewById(R.id.textView);
-
-        String dis = String.format(Locale.CHINA, "距离: %.1f米", record.distance);
-        String duration = record.duration;
-
-        String steps = String.format(Locale.CHINA, " 步数: %d", record.steps);
-        String walking_steps = String.format(Locale.CHINA, "步行步数: %d", record.walking_steps);
-        String running_steps = String.format(Locale.CHINA, " 跑步步数: %d", record.running_steps);
-
+        TextView textView = convertView.findViewById(R.id.tvItem);
         // 优化时间显示：如果开始和结束在同一天，则只显示日期一次
         String timeText = MyUtil.formatTimeRange(record.startTime, record.endTime);
 
+        String dis = String.format(Locale.CHINA, "距离: %.1f米", record.distance);
+        String duration = record.duration;
+        String steps = String.format(Locale.CHINA, "总步数: %d", record.steps);
+        String walking_steps = String.format(Locale.CHINA, " 步行步数: %d", record.walking_steps);
+        String running_steps = String.format(Locale.CHINA, " 跑步步数: %d", record.running_steps);
+
         // 绑定数据
-        textView.setText(timeText + "\n" + dis + " 时长: " + duration + steps + "\n" + walking_steps + running_steps);
+        textView.setText(timeText + "\n" + dis + " 时长: " + duration + "\n" + steps + walking_steps + running_steps);
 
         // 返回填充好的视图
         return convertView;

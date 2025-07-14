@@ -2,8 +2,9 @@ package com.example.finalapp;
 
 import android.location.Location;
 import android.os.Bundle;
-import android.os.Handler;
-import android.widget.ScrollView;
+import android.view.View;
+import android.widget.ArrayAdapter;
+import android.widget.ListView;
 import android.widget.TextView;
 
 import androidx.appcompat.app.AppCompatActivity;
@@ -24,6 +25,7 @@ import com.baidu.mapapi.model.LatLngBounds;
 import com.example.finalapp.room.AppDatabase;
 import com.example.finalapp.room.Record;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 
@@ -40,6 +42,7 @@ public class RecordDetailActivity extends AppCompatActivity {
     private Polyline polyline;
     private Marker startMarker; // 起点标记
     private Marker endMarker;   // 终点标记
+
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -62,22 +65,37 @@ public class RecordDetailActivity extends AppCompatActivity {
         Record record = db.recordDao().getRecordById(recordId);
 
         // 显示详细信息
-        TextView distanceView = findViewById(R.id.tvDistance);
-        TextView durationView = findViewById(R.id.tvDuration);
-        TextView stepsView = findViewById(R.id.tvSteps);
-        TextView walkingStepsView = findViewById(R.id.tvWalkingSteps);
-        TextView runningStepsView = findViewById(R.id.tvRunningSteps);
-        TextView timeView = findViewById(R.id.tvTime);
-
-        distanceView.setText(String.format(Locale.CHINA, "距离: %.1f米", record.distance));
-        durationView.setText("时长: " + record.duration);
-        stepsView.setText("总步数: " + String.valueOf(record.steps));
-        walkingStepsView.setText("步行步数: " + String.valueOf(record.walking_steps));
-        runningStepsView.setText("跑步步数: " + String.valueOf(record.running_steps));
-
+        TextView textView = findViewById(R.id.tvRecord);
         // 优化时间显示：如果开始和结束在同一天，则只显示日期一次
         String timeText = MyUtil.formatTimeRange(record.startTime, record.endTime);
-        timeView.setText(timeText);
+        String dis = String.format(Locale.CHINA, "距离: %.1f米", record.distance);
+        String duration = record.duration;
+        String steps = String.format(Locale.CHINA, "总步数: %d", record.steps);
+        String walking_steps = String.format(Locale.CHINA, " 步行步数: %d", record.walking_steps);
+        String running_steps = String.format(Locale.CHINA, " 跑步步数: %d", record.running_steps);
+        // 显示数据
+        textView.setText(timeText + "\n" + dis + " 时长: " + duration + "\n" + steps + walking_steps + running_steps);
+
+
+        // 显示状态周期列表
+        ListView lvStatusPeriods = findViewById(R.id.lvStatusPeriods);
+        if (record.statusPeriods != null && !record.statusPeriods.isEmpty()) {
+            // 创建简单列表项
+            List<String> periodStrings = new ArrayList<>();
+            for (StatusPeriod period : record.statusPeriods) {
+                periodStrings.add(MyUtil.formatPeriodString(period));
+            }
+
+            ArrayAdapter<String> adapter = new ArrayAdapter<>(
+                    this,
+                    android.R.layout.simple_list_item_1,
+                    periodStrings
+            );
+            lvStatusPeriods.setAdapter(adapter);
+        } else {
+            // 如果没有数据，隐藏列表容器
+            lvStatusPeriods.setVisibility(View.GONE);
+        }
 
         // 初始化地图
         mapView = findViewById(R.id.mapView);
@@ -86,6 +104,7 @@ public class RecordDetailActivity extends AppCompatActivity {
         // 绘制轨迹
         drawTrajectory(record.points);
     }
+
 
     private void drawTrajectory(List<LatLng> points) {
         if (points == null || points.size() < 2) return;
@@ -109,7 +128,7 @@ public class RecordDetailActivity extends AppCompatActivity {
 
         polyline = (Polyline) baiduMap.addOverlay(options);
 
-        // 新增：计算轨迹点之间的最大距离
+        // 计算轨迹点之间的最大距离
         double maxDistanceMeters = 0;
         for (int i = 0; i < points.size() - 1; i++) {
             float[] results = new float[1];
@@ -182,17 +201,6 @@ public class RecordDetailActivity extends AppCompatActivity {
             endMarker.remove();
             endMarker = null;
         }
-    }
-
-    @Override
-    protected void onStart() {
-        super.onStart();
-
-        // 延迟滚动确保布局已加载
-        new Handler().postDelayed(() -> {
-            ScrollView scrollView = findViewById(R.id.scrollView);
-            scrollView.smoothScrollTo(0, 0);
-        }, 100);
     }
 
     // 添加返回按钮处理

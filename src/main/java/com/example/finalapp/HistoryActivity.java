@@ -4,6 +4,8 @@ import android.app.AlertDialog;
 import android.content.Intent;
 import android.os.Bundle;
 import android.util.Log;
+import android.view.Menu;
+import android.view.MenuItem;
 import android.widget.ListView;
 import android.widget.Toast;
 
@@ -85,14 +87,47 @@ public class HistoryActivity extends AppCompatActivity {
         }).start();
     }
 
-    // 添加返回按钮处理
+
+    private void showDeleteAllConfirmationDialog() {
+        new AlertDialog.Builder(this)
+                .setTitle("清空所有记录")
+                .setMessage("确定要删除所有记录吗？此操作不可恢复。")
+                .setPositiveButton("删除", (dialog, which) -> deleteAllRecords())
+                .setNegativeButton("取消", null)
+                .show();
+    }
+
+    private void deleteAllRecords() {
+        new Thread(() -> {
+            AppDatabase db = MyApp.getDatabase();
+            db.recordDao().deleteAllRecords(); // 假设 RecordDao 提供了 deleteAllRecords 方法
+
+            runOnUiThread(() -> {
+                records.clear();
+                adapter.notifyDataSetChanged();
+                Toast.makeText(this, "所有记录已删除", Toast.LENGTH_SHORT).show();
+            });
+        }).start();
+    }
+
     @Override
-    public boolean onOptionsItemSelected(android.view.MenuItem item) {
+    public boolean onCreateOptionsMenu(Menu menu) {
+        getMenuInflater().inflate(R.menu.history_menu, menu);
+        return true;
+    }
+
+    @Override
+    public boolean onOptionsItemSelected(MenuItem item) {
+        int id = item.getItemId();
         if (item.getItemId() == android.R.id.home) {
             finish(); // 关闭当前Activity
             Log.d(TAG, "用户点击了返回按钮");
             return true;
+        } else if (id == R.id.menu_clear_all) {
+            showDeleteAllConfirmationDialog();
+            return true;
         }
+
         return super.onOptionsItemSelected(item);
     }
 }

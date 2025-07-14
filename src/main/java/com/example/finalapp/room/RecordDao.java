@@ -22,4 +22,8 @@ public interface RecordDao {
     //删除方法
     @Delete
     void delete(Record record);
+
+    // 新增：删除所有记录
+    @Query("DELETE FROM records")
+    void deleteAllRecords();
 }

@@ -24,6 +24,10 @@ public class MyApp extends Application {
 
         // 添加隐私协议同意
         SDKInitializer.setAgreePrivacy(getApplicationContext(), true);
+
+        // 设置百度地图API密钥
+        SDKInitializer.setApiKey(Constant.API_KEY);
+
         // 初始化百度地图SDK
         SDKInitializer.initialize(this);
         SDKInitializer.setCoordType(CoordType.BD09LL); // 使用百度坐标

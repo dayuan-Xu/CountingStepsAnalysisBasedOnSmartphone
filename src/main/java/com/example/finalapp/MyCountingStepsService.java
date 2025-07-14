@@ -9,21 +9,13 @@ import android.hardware.SensorEvent;
 import android.hardware.SensorEventListener;
 import android.hardware.SensorManager;
 import android.os.Binder;
-import android.os.Environment;
 import android.os.Handler;
 import android.os.IBinder;
 import android.widget.Toast;
 
 import androidx.core.app.NotificationCompat;
 
-import java.io.File;
-import java.io.FileWriter;
-import java.io.IOException;
-import java.text.SimpleDateFormat;
 import java.util.ArrayList;
-import java.util.Date;
-import java.util.List;
-import java.util.Locale;
 
 public class MyCountingStepsService extends Service implements SensorEventListener {
     private static final String TAG = "我的日志-CountingStepsService";
@@ -32,10 +24,8 @@ public class MyCountingStepsService extends Service implements SensorEventListen
     private Handler handler = new Handler();
     private SensorManager sensorManager;
     private Sensor accelerometer;
-    private final List<String> sensorData = new ArrayList<>();
     private boolean isCounting = false;
     private long lastTimestamp = 0;
-    private String startTime;
     private static final long SAMPLE_INTERVAL = 20; // 50Hz = 20ms
     private static final int SAMPLING_PERIOD_MICRO_SECONDS = 5 * 1000; // 200Hz
     private PeakSelfAdapt2 peakDetector = new PeakSelfAdapt2();
@@ -75,23 +65,29 @@ public class MyCountingStepsService extends Service implements SensorEventListen
             Toast.makeText(this, "设备不支持加速度传感器!", Toast.LENGTH_SHORT).show();
             return;
         }
-        startTime = new SimpleDateFormat("yyyy-MM-dd-HH-mm-ss", Locale.getDefault()).format(new Date());
-        sensorData.clear();
-        sensorData.add("x,y,z,timestamp");
         // 注册传感器监听器
         sensorManager.registerListener(this, accelerometer, SAMPLING_PERIOD_MICRO_SECONDS);
 
+        // 重置计步算法的状态数据，因为之前可能计步过一轮
+        peakDetector.resetCounting();
+
         // 设置计步标志,允许计步算法处理传感器数据
         isCounting = true;
+
+        // 上次传感器数据获取时间
         lastTimestamp = System.currentTimeMillis();
     }
 
     public void stopCounting() {
         if (isCounting) {
+            // 停止传感器监听
             sensorManager.unregisterListener(this);
+
+            // 不再允许计步算法处理新数据
             isCounting = false;
-            saveToCSV();
-            peakDetector.stop();
+
+            // 结束当前时间段
+            peakDetector.endLastPeriod();
         }
     }
 
@@ -104,10 +100,6 @@ public class MyCountingStepsService extends Service implements SensorEventListen
         long currentTime = System.currentTimeMillis();
         // 检查是否达到50Hz采样间隔
         if (currentTime - lastTimestamp >= SAMPLE_INTERVAL) {
-            float x = event.values[0];
-            float y = event.values[1];
-            float z = event.values[2];
-            sensorData.add(String.format(Locale.US, "%.6f,%.6f,%.6f,%d", x, y, z, currentTime));
             lastTimestamp = currentTime;
 
             // 处理传感器数据
@@ -123,25 +115,6 @@ public class MyCountingStepsService extends Service implements SensorEventListen
 
     @Override
     public void onAccuracyChanged(Sensor sensor, int accuracy) {
-    }
-
-    private void saveToCSV() {
-        if (sensorData.size() <= 1) return;
-
-        String endTime = new SimpleDateFormat("MM-dd-HH-mm-ss", Locale.getDefault()).format(new Date());
-        String fileName = "AccData_" + startTime + "_To_" + endTime + ".csv";
-
-        File downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS);
-        File file = new File(downloadsDir, fileName);
-
-        try (FileWriter writer = new FileWriter(file)) {
-            for (String line : sensorData) {
-                writer.append(line).append("\n");
-            }
-            Toast.makeText(this, "数据已保存到: " + file.getAbsolutePath(), Toast.LENGTH_LONG).show();
-        } catch (IOException e) {
-            Toast.makeText(this, "保存失败: " + e.getMessage(), Toast.LENGTH_SHORT).show();
-        }
     }
 
     @Override
@@ -178,5 +151,9 @@ public class MyCountingStepsService extends Service implements SensorEventListen
 
     public int getRunningSteps() {
         return peakDetector.getRunningSteps();
+    }
+
+    public ArrayList<StatusPeriod> getStatusPeriods() {
+        return peakDetector.getStatusPeriods();
     }
 }

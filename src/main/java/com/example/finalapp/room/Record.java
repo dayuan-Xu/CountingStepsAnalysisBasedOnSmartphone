@@ -5,6 +5,7 @@ import androidx.room.PrimaryKey;
 import androidx.room.TypeConverters;
 
 import com.baidu.mapapi.model.LatLng;
+import com.example.finalapp.StatusPeriod;
 
 import java.util.Date;
 import java.util.List;
@@ -29,4 +30,8 @@ public class Record {
 
     @TypeConverters(LatLngListConverter.class)
     public List<LatLng> points; // 轨迹点列表
+
+    // 运动周期列表<---我的计步服务
+    @TypeConverters(StatusPeriodListConverter.class)
+    public List<StatusPeriod> statusPeriods;
 }

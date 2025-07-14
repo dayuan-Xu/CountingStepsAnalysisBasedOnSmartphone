@@ -66,4 +66,41 @@ public class MyUtil {
                 cal1.get(Calendar.DAY_OF_MONTH) == cal2.get(Calendar.DAY_OF_MONTH);
     }
 
+    public static String formatDuration(long millis) {
+        long seconds = millis / 1000;
+        long hours = seconds / 3600;
+        long minutes = (seconds % 3600) / 60;
+        long secs = seconds % 60;
+
+        if (hours > 0) {
+            return String.format(Locale.getDefault(), "%02d:%02d:%02d", hours, minutes, secs);
+        } else {
+            return String.format(Locale.getDefault(), "%02d:%02d", minutes, secs);
+        }
+    }
+
+    // 格式化周期信息为字符串
+    public static String formatPeriodString(StatusPeriod period) {
+        String statusText;
+        switch (period.status) {
+            case STILL:
+                statusText = "静止";
+                break;
+            case WALKING:
+                statusText = "行走";
+                break;
+            case RUNNING:
+                statusText = "跑步";
+                break;
+            default:
+                statusText = "未知";
+        }
+
+        String duration = formatDuration(period.endTime - period.startTime);
+
+        return String.format(Locale.CHINA, "%s: %d步 %s",
+                statusText,
+                period.steps,
+                duration);
+    }
 }

@@ -4,7 +4,10 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class PeakSelfAdapt2 {
-    private String status = "静止";
+    // 新增：运动周期管理
+    private StatusPeriod currentPeriod;
+    private final ArrayList<StatusPeriod> statusPeriods = new ArrayList<>();
+    private Status status = Status.STILL;
     private boolean statusChanged = false;
 
     private List<Float> Accs = new ArrayList<>(); // 存储三轴合加速度模值
@@ -13,7 +16,7 @@ public class PeakSelfAdapt2 {
     private int windowStart = 0; // 滑动窗口起点
 
     private int kickingPeakNum = 0; // 蹬脚波峰数量（即步数）
-    private long lastPeakTimestamp = -1; // 上一次波峰时间戳，-1 表示静止
+    private long lastPeakTimestamp = -1; // 上一次波峰时间戳，-1 表示当前为静止状态
     private int potentialPeakIndex = 0; // 潜在波峰索引
     private float potentialPeakValue = 0.0f; // 潜在波峰大小
     private long potentialPeakTimestamp = 0; // 潜在波峰时间戳
@@ -38,13 +41,42 @@ public class PeakSelfAdapt2 {
     private int walking_steps = 0;
     private int running_steps = 0;
 
-    // 终止算法，重置算法状态。
-    public void stop() {
-        status = "静止";
+
+    // 开始新周期
+    private void startNewPeriod(long startTime) {
+        currentPeriod = new StatusPeriod();
+        currentPeriod.startTime = startTime;
+        currentPeriod.status = status;
+    }
+
+    // 结束当前周期
+    private void endCurrentPeriod(long endTime) {
+        currentPeriod.endTime = endTime;
+        statusPeriods.add(currentPeriod);
+        currentPeriod = null;
+    }
+
+    // 在停止本轮计步时，结束当前周期，由外部调用
+    public void endLastPeriod() {
+        endCurrentPeriod(System.currentTimeMillis());
+    }
+
+
+    // 重置为静止状态
+    private void resetToStill() {
+        status = Status.STILL;
+        lastPeakTimestamp = -1;
+        noNewPeakDetectedTimes = 0;
+    }
+
+    // 重置算法之前的计步状态数据,方便下一轮计步。
+    public void resetCounting() {
+        status = Status.STILL;
         statusChanged = false;
         Accs.clear();
         baseTimestamp = -1;
         AccsTimestamp.clear();
+        statusPeriods.clear();
         windowStart = 0;
 
         kickingPeakNum = 0;
@@ -70,6 +102,7 @@ public class PeakSelfAdapt2 {
 
         if (baseTimestamp == -1) {
             baseTimestamp = timestamp;
+            startNewPeriod(System.currentTimeMillis());
         }
 
         AccsTimestamp.add(timestamp - baseTimestamp);
@@ -80,7 +113,7 @@ public class PeakSelfAdapt2 {
 
             // 如果最近0.4s潜在波峰达到蹬脚大小的加速度，则检测是否是真的蹬脚波峰
             if (reachedKicking) {
-                if ("静止".equals(status)) {
+                if (Status.STILL == status) {
                     VICINITY_SIZE = 10;
                 } else {
                     if (potentialPeakValue > 2 * 9.8) {
@@ -101,24 +134,30 @@ public class PeakSelfAdapt2 {
                         kickingPeakNum++;
                         if (lastPeakTimestamp == -1) {
                             if (potentialPeakValue > 2 * 9.8) {
-                                status = "奔跑中";
+                                status = Status.RUNNING;
                             } else {
-                                status = "步行中";
+                                status = Status.WALKING;
                             }
                             statusChanged = true;
+                            endCurrentPeriod(System.currentTimeMillis());
+                            startNewPeriod(System.currentTimeMillis());
                             System.out.printf("于%.2fs检测到运动开始\n", (timestamp - baseTimestamp) / 1000.0);
                         }
                         lastPeakTimestamp = potentialPeakTimestamp;
                         noNewPeakDetectedTimes = 0;
 
-                        if (potentialPeakValue > 2 * 9.8 && "步行中".equals(status)) {
-                            status = "奔跑中";
+                        if (potentialPeakValue > 2 * 9.8 && Status.WALKING == status) {
+                            status = Status.RUNNING;
                             statusChanged = true;
-                            System.out.printf("于%.2fs探测到从跑步变为行走\n", (timestamp - baseTimestamp) / 1000.0);
-                        } else if (potentialPeakValue <= 2 * 9.8 && "奔跑中".equals(status)) {
-                            status = "步行中";
-                            statusChanged = true;
+                            endCurrentPeriod(System.currentTimeMillis());
+                            startNewPeriod(System.currentTimeMillis());
                             System.out.printf("于%.2fs探测到从行走变为跑步\n", (timestamp - baseTimestamp) / 1000.0);
+                        } else if (potentialPeakValue <= 2 * 9.8 && Status.RUNNING == status) {
+                            status = Status.WALKING;
+                            statusChanged = true;
+                            endCurrentPeriod(System.currentTimeMillis());
+                            startNewPeriod(System.currentTimeMillis());
+                            System.out.printf("于%.2fs探测到从跑步变为行走\n", (timestamp - baseTimestamp) / 1000.0);
                         }
                     }
                 }
@@ -133,9 +172,10 @@ public class PeakSelfAdapt2 {
                             treadingValleyNum++;
                             lastValleyTimestamp = potentialValleyTimestamp;
                             currentSteps++;
-                            if ("奔跑中".equals(status)) {
+                            currentPeriod.steps++;
+                            if (Status.RUNNING == status) {
                                 running_steps++;
-                            } else if ("步行中".equals(status)) {
+                            } else if (Status.WALKING == status) {
                                 walking_steps++;
                             }
                             System.out.printf("于%.2fs探测到新的Valley，波谷时间戳%.2fs，认为探测到新的一步\n",
@@ -153,8 +193,10 @@ public class PeakSelfAdapt2 {
         }
 
         if (noNewPeakDetectedTimes > MAX_TIME_GAP / 20) {
-            reset();
+            resetToStill();
             statusChanged = true;
+            endCurrentPeriod(System.currentTimeMillis());
+            startNewPeriod(System.currentTimeMillis());
             System.out.printf("于%.2f探测到太久没有新波峰，重置运动状态为静止,同时重置算法状态\n",
                     (timestamp - baseTimestamp) / 1000.0);
         }
@@ -245,14 +287,6 @@ public class PeakSelfAdapt2 {
         potentialValleyTimestamp = minTime;
     }
 
-    // 重置为静止状态
-    private void reset() {
-        status = "静止";
-        statusChanged = false;
-        lastPeakTimestamp = -1;
-        noNewPeakDetectedTimes = 0;
-    }
-
     private boolean vicinityOkForValley() {
         int index = potentialValleyIndex;
         int vicinitySize = 9;
@@ -291,4 +325,7 @@ public class PeakSelfAdapt2 {
         return running_steps;
     }
 
+    public ArrayList<StatusPeriod> getStatusPeriods() {
+        return statusPeriods;
+    }
 }

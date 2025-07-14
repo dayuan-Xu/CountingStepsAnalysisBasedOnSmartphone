@@ -7,11 +7,12 @@
     android:padding="12dp">
 
     <TextView
-        android:id="@+id/textView"
+        android:id="@+id/tvItem"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:textSize="18sp"
         android:textStyle="bold"
         android:ellipsize="end"
-        android:maxLines="3" />
+        android:maxLines="3"
+        android:gravity="center" />
 </LinearLayout>
