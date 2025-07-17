@@ -10,21 +10,10 @@
         android:layout_marginTop="100sp"
         android:orientation="vertical">
 
-        <TextView
-            android:id="@+id/tvRecord"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:ellipsize="end"
-            android:gravity="center"
-            android:maxLines="3"
-            android:textSize="18sp"
-            android:textStyle="bold" />
-
-        <!-- 运动周期列表 -->
         <ListView
-            android:id="@+id/lvStatusPeriods"
+            android:id="@+id/listView"
             android:layout_width="match_parent"
-            android:layout_height="80sp" />
+            android:layout_height="150sp" />
 
         <!-- 地图 -->
         <com.baidu.mapapi.map.MapView

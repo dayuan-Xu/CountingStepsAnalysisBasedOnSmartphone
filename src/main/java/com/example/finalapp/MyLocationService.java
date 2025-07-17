@@ -158,7 +158,7 @@ public class MyLocationService extends Service {
         });
 
         // GPS监控（在后台线程）
-        startGpsMonitoring();
+        startSignalMonitoring();
         Log.d(TAG, "MyLocationService实例已创建");
     }
 
@@ -187,7 +187,7 @@ public class MyLocationService extends Service {
     private Notification createNotification() {
         // 创建点击通知
         return new NotificationCompat.Builder(this, CHANNEL_ID)
-                .setContentTitle("定位服务已开启")
+                .setContentTitle("已创建我的定位服务")
                 .setSmallIcon(android.R.drawable.ic_menu_mylocation)
                 .build();
     }
@@ -241,7 +241,7 @@ public class MyLocationService extends Service {
                     String finalType = type;
                     mainHandler.post(() -> {
                         // 更新UI: 显示日志，在地图上显示最新位置点
-                        callback.updateLocationOnMap(currentPoint, speed, accuracy);
+                        callback.updateLocationOnMap(currentPoint, accuracy);
                         callback.updateLocationLog(timestamp + "-收到新定位，类型:" + finalType);
                     });
                 }
@@ -378,19 +378,19 @@ public class MyLocationService extends Service {
         option.setCoorType("bd09ll");// 设置坐标类型
         option.setScanSpan(1000);// 设置定位间隔，单位毫秒
         option.setOpenGnss(true);// 高精度定位和仅仅使用设备时必须打开
-        option.setLocationNotify(true);//当卫星定位有效时按照1S/1次频率输出卫星定位结果
+        option.setLocationNotify(true);
         option.SetIgnoreCacheException(true);//不缓存定位数据
         option.setIgnoreKillProcess(true);//stop时不杀死定位SDK所处进程
         option.setFirstLocType(LocationClientOption.FirstLocType.SPEED_IN_FIRST_LOC);// 设置首次定位类型为速度优先
         return option;
     }
 
-    private void startGpsMonitoring() {
+    private void startSignalMonitoring() {
         // 使用独立计时器（避免递归积累）
         monitorTask = new Runnable() {
             @Override
             public void run() {
-                checkGpsSignal();
+                checkSignal();
                 mainHandler.postDelayed(this, 8000); // 主线程每8s检查一次GPS信号
             }
         };
@@ -399,16 +399,16 @@ public class MyLocationService extends Service {
     }
 
     // 提取检查逻辑
-    private void checkGpsSignal() {
+    private void checkSignal() {
         long currentTime = System.currentTimeMillis();
-        // 如果定位服务开启后一直没有收到GPS信号 或者 GPS信号中途丢失，则显示GPS信号弱提示
+        // 如果定位服务开启后一直没有收到定位信号 或者 定位信号中途丢失，则显示GPS信号弱提示
         if (mLocationClient != null && mLocationClient.isStarted() && lastLocationTime == -1 && (currentTime - locationClientStartedTime) > 5000
                 || mLocationClient != null && mLocationClient.isStarted() && lastLocationTime != -1 && (currentTime - lastLocationTime) > 5000) {
             // 添加日志
             if (mLocationClient != null && mLocationClient.isStarted() && lastLocationTime == -1 && (currentTime - locationClientStartedTime) > 5000)
-                Log.e(TAG, "一直检测不到卫星信号！！！");
+                Log.e(TAG, "一直检测不到定位信号！！！");
             else
-                Log.e(TAG, "卫星信号中断！！！");
+                Log.e(TAG, "定位信号中断！！！");
 
             // 添加callback有效性检查
             if (callback != null) {
@@ -416,7 +416,7 @@ public class MyLocationService extends Service {
                     if (isTracking) {
                         callback.stopTracking();
                     }
-                    callback.showGpsWeakAlert();
+                    callback.showSignalWeakAlert();
                 });
             }
         }
@@ -477,9 +477,6 @@ public class MyLocationService extends Service {
             }
         }
     }
-
-
-    // 保存本次运动记录: 总距离，时间，轨迹
 
     /**
      * 首次定位很重要，选一个精度相对较高的起始点

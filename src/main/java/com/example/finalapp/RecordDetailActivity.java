@@ -2,10 +2,8 @@ package com.example.finalapp;
 
 import android.location.Location;
 import android.os.Bundle;
-import android.view.View;
 import android.widget.ArrayAdapter;
 import android.widget.ListView;
-import android.widget.TextView;
 
 import androidx.appcompat.app.AppCompatActivity;
 
@@ -64,8 +62,6 @@ public class RecordDetailActivity extends AppCompatActivity {
         AppDatabase db = MyApp.getDatabase();
         Record record = db.recordDao().getRecordById(recordId);
 
-        // 显示详细信息
-        TextView textView = findViewById(R.id.tvRecord);
         // 优化时间显示：如果开始和结束在同一天，则只显示日期一次
         String timeText = MyUtil.formatTimeRange(record.startTime, record.endTime);
         String dis = String.format(Locale.CHINA, "距离: %.1f米", record.distance);
@@ -74,27 +70,26 @@ public class RecordDetailActivity extends AppCompatActivity {
         String walking_steps = String.format(Locale.CHINA, " 步行步数: %d", record.walking_steps);
         String running_steps = String.format(Locale.CHINA, " 跑步步数: %d", record.running_steps);
         // 显示数据
-        textView.setText(timeText + "\n" + dis + " 时长: " + duration + "\n" + steps + walking_steps + running_steps);
+        String text = timeText + "\n" + dis + " 时长: " + duration + "\n" + steps + walking_steps + running_steps;
 
+        // 创建简单列表项
+        List<String> listStrings = new ArrayList<>();
+        listStrings.add(text);
 
         // 显示状态周期列表
-        ListView lvStatusPeriods = findViewById(R.id.lvStatusPeriods);
+        ListView listView = findViewById(R.id.listView);
         if (record.statusPeriods != null && !record.statusPeriods.isEmpty()) {
-            // 创建简单列表项
-            List<String> periodStrings = new ArrayList<>();
+
             for (StatusPeriod period : record.statusPeriods) {
-                periodStrings.add(MyUtil.formatPeriodString(period));
+                listStrings.add(MyUtil.formatPeriodString(period));
             }
 
             ArrayAdapter<String> adapter = new ArrayAdapter<>(
                     this,
                     android.R.layout.simple_list_item_1,
-                    periodStrings
+                    listStrings
             );
-            lvStatusPeriods.setAdapter(adapter);
-        } else {
-            // 如果没有数据，隐藏列表容器
-            lvStatusPeriods.setVisibility(View.GONE);
+            listView.setAdapter(adapter);
         }
 
         // 初始化地图

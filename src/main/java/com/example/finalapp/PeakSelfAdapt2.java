@@ -7,7 +7,7 @@ public class PeakSelfAdapt2 {
     // 新增：运动周期管理
     private StatusPeriod currentPeriod;
     private final ArrayList<StatusPeriod> statusPeriods = new ArrayList<>();
-    private Status status = Status.STILL;
+    private Status currentStatus = Status.STILL;
     private boolean statusChanged = false;
 
     private List<Float> Accs = new ArrayList<>(); // 存储三轴合加速度模值
@@ -46,7 +46,7 @@ public class PeakSelfAdapt2 {
     private void startNewPeriod(long startTime) {
         currentPeriod = new StatusPeriod();
         currentPeriod.startTime = startTime;
-        currentPeriod.status = status;
+        currentPeriod.status = currentStatus;
     }
 
     // 结束当前周期
@@ -64,14 +64,14 @@ public class PeakSelfAdapt2 {
 
     // 重置为静止状态
     private void resetToStill() {
-        status = Status.STILL;
+        currentStatus = Status.STILL;
         lastPeakTimestamp = -1;
         noNewPeakDetectedTimes = 0;
     }
 
     // 重置算法之前的计步状态数据,方便下一轮计步。
     public void resetCounting() {
-        status = Status.STILL;
+        currentStatus = Status.STILL;
         statusChanged = false;
         Accs.clear();
         baseTimestamp = -1;
@@ -113,7 +113,7 @@ public class PeakSelfAdapt2 {
 
             // 如果最近0.4s潜在波峰达到蹬脚大小的加速度，则检测是否是真的蹬脚波峰
             if (reachedKicking) {
-                if (Status.STILL == status) {
+                if (Status.STILL == currentStatus) {
                     VICINITY_SIZE = 10;
                 } else {
                     if (potentialPeakValue > 2 * 9.8) {
@@ -134,9 +134,9 @@ public class PeakSelfAdapt2 {
                         kickingPeakNum++;
                         if (lastPeakTimestamp == -1) {
                             if (potentialPeakValue > 2 * 9.8) {
-                                status = Status.RUNNING;
+                                currentStatus = Status.RUNNING;
                             } else {
-                                status = Status.WALKING;
+                                currentStatus = Status.WALKING;
                             }
                             statusChanged = true;
                             endCurrentPeriod(System.currentTimeMillis());
@@ -146,14 +146,14 @@ public class PeakSelfAdapt2 {
                         lastPeakTimestamp = potentialPeakTimestamp;
                         noNewPeakDetectedTimes = 0;
 
-                        if (potentialPeakValue > 2 * 9.8 && Status.WALKING == status) {
-                            status = Status.RUNNING;
+                        if (potentialPeakValue > 2 * 9.8 && Status.WALKING == currentStatus) {
+                            currentStatus = Status.RUNNING;
                             statusChanged = true;
                             endCurrentPeriod(System.currentTimeMillis());
                             startNewPeriod(System.currentTimeMillis());
                             System.out.printf("于%.2fs探测到从行走变为跑步\n", (timestamp - baseTimestamp) / 1000.0);
-                        } else if (potentialPeakValue <= 2 * 9.8 && Status.RUNNING == status) {
-                            status = Status.WALKING;
+                        } else if (potentialPeakValue <= 2 * 9.8 && Status.RUNNING == currentStatus) {
+                            currentStatus = Status.WALKING;
                             statusChanged = true;
                             endCurrentPeriod(System.currentTimeMillis());
                             startNewPeriod(System.currentTimeMillis());
@@ -173,9 +173,9 @@ public class PeakSelfAdapt2 {
                             lastValleyTimestamp = potentialValleyTimestamp;
                             currentSteps++;
                             currentPeriod.steps++;
-                            if (Status.RUNNING == status) {
+                            if (Status.RUNNING == currentStatus) {
                                 running_steps++;
-                            } else if (Status.WALKING == status) {
+                            } else if (Status.WALKING == currentStatus) {
                                 walking_steps++;
                             }
                             System.out.printf("于%.2fs探测到新的Valley，波谷时间戳%.2fs，认为探测到新的一步\n",

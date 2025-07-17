@@ -24,7 +24,7 @@ public class MyCountingStepsService extends Service implements SensorEventListen
     private Handler handler = new Handler();
     private SensorManager sensorManager;
     private Sensor accelerometer;
-    private boolean isCounting = false;
+    private boolean isCounting = false;// 当前是否正在计步
     private long lastTimestamp = 0;
     private static final long SAMPLE_INTERVAL = 20; // 50Hz = 20ms
     private static final int SAMPLING_PERIOD_MICRO_SECONDS = 5 * 1000; // 200Hz
@@ -40,7 +40,7 @@ public class MyCountingStepsService extends Service implements SensorEventListen
         PendingIntent pendingIntent = PendingIntent.getActivity(this, 0, notificationIntent, PendingIntent.FLAG_IMMUTABLE);
 
         Notification notification = new NotificationCompat.Builder(this, MyLocationService.CHANNEL_ID)
-                .setContentTitle("计步，轨迹跟踪中...")
+                .setContentTitle("已创建我的计步服务")
                 .setContentText("点击回到主界面")
                 .setSmallIcon(android.R.drawable.ic_menu_mylocation)
                 .setContentIntent(pendingIntent)
@@ -54,9 +54,6 @@ public class MyCountingStepsService extends Service implements SensorEventListen
         if (sensorManager != null) {
             accelerometer = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER);
         }
-
-        // 开始监听传感器并计步
-        startCounting();
     }
 
 

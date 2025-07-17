@@ -8,7 +8,6 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.ServiceConnection;
 import android.content.pm.PackageManager;
-import android.location.LocationManager;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.IBinder;
@@ -91,13 +90,15 @@ public class MainActivity extends AppCompatActivity {
             // 设置回调接口（关键连接点）
             myLocationService.setCallback(MainActivity.this);
 
-            // 当onCreate后重新绑定时，从服务中恢复UI状态
+
             if (myLocationService.isTracking()) {
+                // 表明之前启动了轨迹跟踪，则恢复UI状态
                 btnStartOrStop.setImageResource(R.drawable.ic_btn_stop);
                 updateDistanceDisplay();
                 updateMapTrajectory();
                 Log.i(TAG, "已经成功绑定到我的定位服务，回调接口已设置，UI状态已经恢复");
             } else {
+                // 表明之前没有启动过轨迹跟踪
                 Log.i(TAG, "已经成功绑定到我的定位服务，回调接口已设置");
             }
         }
@@ -140,7 +141,6 @@ public class MainActivity extends AppCompatActivity {
             myStepService = null;
         }
     };
-    LocationManager locationManager;
 
 
     @Override
@@ -159,12 +159,16 @@ public class MainActivity extends AppCompatActivity {
         // 2 初始化UI
         initUI();
 
-        // 3. 先启动前台服务（声明重要性），会触发服务的onCreate()方法和onStartCommand()方法
+        // 3. 先启动前台服务（声明重要性），第一次调用会创建服务并调用onCreate()
+        // 之后再调用只会触发onStartCommand()方法而不会创建新的服务实例
         Intent locationServiceIntent = new Intent(this, MyLocationService.class);
+        Intent stepServiceIntent = new Intent(this, MyCountingStepsService.class);
+        startForegroundService(stepServiceIntent);
         startForegroundService(locationServiceIntent);
 
         // 4. 再绑定服务（建立通信）
         bindService(locationServiceIntent, locationConnection, Context.BIND_AUTO_CREATE);
+        bindService(stepServiceIntent, stepConnection, Context.BIND_AUTO_CREATE);
     }
 
 
@@ -316,7 +320,7 @@ public class MainActivity extends AppCompatActivity {
 
         // 设置初始缩放级别
         MapStatus.Builder builder = new MapStatus.Builder();
-        builder.zoom(18.0f); // 设置初始缩放级别为18
+        builder.zoom(20.0f); // 设置初始缩放级别
         mBaiduMap.setMapStatus(MapStatusUpdateFactory.newMapStatus(builder.build()));
 
         // 配置定位图标
@@ -333,15 +337,11 @@ public class MainActivity extends AppCompatActivity {
         btnStartOrStop.setImageResource(R.drawable.ic_btn_stop);
         btnStartOrStop.setContentDescription("长按停止");
 
-        // 2 启动持续轨迹跟踪和速度实时识别
+        // 2 启动 轨迹跟踪和速度实时识别
         startTracking();
 
-        // 3 启动持续计步
-        Intent stepServiceIntent = new Intent(this, MyCountingStepsService.class);
-        startForegroundService(stepServiceIntent);
-
-        // 4 绑定计步服务（建立通信渠道)
-        bindService(stepServiceIntent, stepConnection, Context.BIND_AUTO_CREATE);
+        // 3 启动 计步
+        startCounting();
     }
 
     private void handleStop() {
@@ -349,22 +349,16 @@ public class MainActivity extends AppCompatActivity {
         btnStartOrStop.setImageResource(R.drawable.ic_btn_start);
         btnStartOrStop.setContentDescription("单击开始");
 
-        // 2 停止持续轨迹跟踪和速度实时识别
+        // 2 停止 轨迹跟踪和速度实时识别
         stopTracking();
 
-        // 3 停止持续计步
+        // 3 停止 计步
         stopCounting();
 
         // 5 保存记录，此时还不能解绑计步服务，因为要获取其中状态数据
         saveRecord();
 
-        // 6 解绑、停止计步服务
-        Intent stepServiceIntent = new Intent(this, MyCountingStepsService.class);
-        if (isStepBound) {
-            unbindService(stepConnection);
-            isStepBound = false;
-        }
-        stopService(stepServiceIntent);
+
     }
 
     private void startCircularProgressAnimation() {
@@ -405,7 +399,17 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    // 停止持续轨迹跟踪和速度实时识别
+    // 启动 计步
+    private void startCounting() {
+        if (isStepBound) {
+            myStepService.startCounting();
+            Log.d(TAG, "已经启动 计步");
+        } else {
+            Toast.makeText(this, "计步服务未绑定！", Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    // 停止 轨迹跟踪和速度实时识别
     public void stopTracking() {
         if (isLocationBound) {
             updateDistanceDisplay();
@@ -423,7 +427,7 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    // 停止持续计步
+    // 停止 计步
     private void stopCounting() {
         Log.d(TAG, "stopCounting开始执行");
         if (isStepBound) {
@@ -470,12 +474,12 @@ public class MainActivity extends AppCompatActivity {
     }
 
     // 更新地图上的当前坐标
-    public void updateLocationOnMap(LatLng point, float speed, float accuracy) {
+    public void updateLocationOnMap(LatLng point, float accuracy) {
         if (mBaiduMap == null) return;
 
         // 创建位置数据（方向需要自己实现）
         MyLocationData locData = new MyLocationData.Builder().accuracy(accuracy)// 精度圈大小
-                .latitude(point.latitude).longitude(point.longitude).speed(speed).build();
+                .latitude(point.latitude).longitude(point.longitude).build();
 
         // 更新地图，显示传入的坐标
         mBaiduMap.setMyLocationData(locData);
@@ -532,9 +536,9 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    // 显示GPS信号弱提示
-    public void showGpsWeakAlert() {
-        runOnUiThread(() -> Toast.makeText(MainActivity.this, "长时间未获取到卫星信号，请前往室外", Toast.LENGTH_SHORT).show());
+    // 显示信号弱提示
+    public void showSignalWeakAlert() {
+        runOnUiThread(() -> Toast.makeText(MainActivity.this, "长时间未获取到定位信号，请移动位置！", Toast.LENGTH_SHORT).show());
     }
 
     // 显示轨迹总距离
@@ -659,11 +663,8 @@ public class MainActivity extends AppCompatActivity {
         }
 
         if (myLocationService != null) {
-            if (myLocationService.isTracking()) {
-                // 如果处于轨迹跟踪中，则切回到本界面时更新地图轨迹
-                updateMapTrajectory();
-            } else {
-                // 否则只是恢复位置更新
+            if (!myLocationService.isTracking()) {
+                // 如果当前不处于轨迹跟踪中，则继续位置更新
                 myLocationService.resumeLocationUpdates();
             }
         }
@@ -729,8 +730,12 @@ public class MainActivity extends AppCompatActivity {
         if (myLocationService != null) {
             isTracking = myLocationService.isTracking();
         }
+        boolean isCounting = false;
+        if (myStepService != null) {
+            isCounting = myStepService.isCounting();
+        }
 
-        // 如果当前还和服务绑定，则消除服务中对MainActivity的回调，解绑服务
+        // 消除两个已绑定服务中对MainActivity的回调，解绑服务
         if (isLocationBound) {
             if (myLocationService != null) {
                 myLocationService.clearCallback();
@@ -740,6 +745,7 @@ public class MainActivity extends AppCompatActivity {
             } catch (IllegalArgumentException e) {
                 Log.e(TAG, "解绑定位服务异常", e);
             }
+            myLocationService = null;
             isLocationBound = false;
         }
 
@@ -748,14 +754,22 @@ public class MainActivity extends AppCompatActivity {
                 myStepService.clearCallback();
             }
             unbindService(stepConnection);
+            myStepService = null;
             isStepBound = false;
         }
 
-        // 在非跟踪状态下销毁该Activity，专门杀死定位服务
+        // 在非跟踪状态下，停止定位服务
         if (!isTracking) {
             Intent locationServiceIntent = new Intent(this, MyLocationService.class);
             stopService(locationServiceIntent);
-            Log.d(TAG, "当前没有处于轨迹跟踪状态，则杀死定位服务");
+            Log.d(TAG, "当前没有处于轨迹跟踪状态，则停止定位服务");
+        }
+
+        if (!isCounting) {
+            // 在非计步状态下，停止计步服务
+            Intent stepServiceIntent = new Intent(this, MyCountingStepsService.class);
+            stopService(stepServiceIntent);
+            Log.d(TAG, "当前没有处于计步状态，则停止计步服务");
         }
     }
 }
