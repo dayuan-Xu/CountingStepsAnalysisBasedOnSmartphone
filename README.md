@@ -1,6 +1,6 @@
 # 基于智能手机的计步分析
 
-提供计步(基于自适应波峰步态检测算法)，速度识别，轨迹跟踪等(基于百度地图SDK)功能的安卓应用。
+提供计步(基于自适应波峰步态检测算法)，速度识别，轨迹跟踪等(基于[百度地图SDK](https://lbsyun.baidu.com/faq/api?title=androidsdk))功能的安卓应用。
 
 ### 一、主界面
 ![应用主界面MainActivity](images/主界面.png)
